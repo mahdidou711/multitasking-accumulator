@@ -1,6 +1,47 @@
+# Fichiers système et configuration locale
 .DS_Store
-.vscode
+.vscode/
+.idea/
+*.swp
+*~
+
+# Fichiers objets
 *.o
+
+# Exécutables historiques du professeur
 mySoftwarePosix
 mySoftwareAtomic
 mySoftwareTestAndSet
+/exercice-1/preambule
+/exercice-1/multitaskingAccumulatorPosix
+/exercice-1/multitaskingAccumulatorAtomic
+/exercice-1/multitaskingAccumulatorTestAndSet
+*.exe
+
+# Fichiers générés par la compilation
+build/
+exercice-1/diagrams/*.png
+
+# Documents conservés localement
+/Cours/
+/rapport/
+/notes/
+
+# Archives, sauvegardes et fichiers temporaires
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+*.bak
+*.tmp
+*.log
+
+# Secrets et configurations locales courantes
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx

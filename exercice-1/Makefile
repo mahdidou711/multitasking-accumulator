@@ -1,52 +1,136 @@
 .POSIX:
+
+# ============================================================
+# Configuration du compilateur
+# ============================================================
+
 CC      = cc
 CFLAGS  = -std=c11 -Wall -Wextra -O3 -mcx16 -pthread #-DDEBUG
 LDFLAGS = -pthread
 #LDLIBS  = -latomic
 
-C= $(wildcard *.c)
-H= $(wildcard *.h)
-PREAMBULE_SRCS := preambule.c
-POSIX_SRCS := $(filter-out %preambule.c %Atomic.c %TestAndSet.c, $(C))
-ATOMIC_SRCS := $(filter-out %preambule.c %POSIX.c %TestAndSet.c, $(C))
-TESTANDSET_SRCS := $(filter-out %preambule.c %POSIX.c %Atomic.c, $(C))
-DEPS= $(H:.h)
-PREAMBULE_OBJS= $(PREAMBULE_SRCS:.c=.o)
-POSIX_OBJS= $(POSIX_SRCS:.c=.o)
-ATOMIC_OBJS= $(ATOMIC_SRCS:.c=.o)
-TESTANDSET_OBJS= $(TESTANDSET_SRCS:.c=.o)
+# ============================================================
+# Organisation des répertoires
+# ============================================================
+
+SRC_DIR     = src
+INCLUDE_DIR = include
+BUILD_DIR   = build
+OBJ_DIR     = $(BUILD_DIR)/obj
+BIN_DIR     = $(BUILD_DIR)/bin
+
+CPPFLAGS = -I$(INCLUDE_DIR)
+
+# ============================================================
+# Fichiers sources et dépendances
+# ============================================================
+
+C = $(wildcard $(SRC_DIR)/*.c)
+H = $(wildcard $(INCLUDE_DIR)/*.h)
+
+PREAMBULE_SRCS := $(SRC_DIR)/preambule.c
+
+POSIX_SRCS := $(filter-out \
+    $(SRC_DIR)/preambule.c \
+    $(SRC_DIR)/%Atomic.c \
+    $(SRC_DIR)/%TestAndSet.c, $(C))
+
+ATOMIC_SRCS := $(filter-out \
+    $(SRC_DIR)/preambule.c \
+    $(SRC_DIR)/%POSIX.c \
+    $(SRC_DIR)/%TestAndSet.c, $(C))
+
+TESTANDSET_SRCS := $(filter-out \
+    $(SRC_DIR)/preambule.c \
+    $(SRC_DIR)/%POSIX.c \
+    $(SRC_DIR)/%Atomic.c, $(C))
+
+PREAMBULE_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(PREAMBULE_SRCS))
+POSIX_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(POSIX_SRCS))
+ATOMIC_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(ATOMIC_SRCS))
+TESTANDSET_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(TESTANDSET_SRCS))
+
+# ============================================================
+# Diagrammes PlantUML
+# ============================================================
+
 PUMLS := $(wildcard diagrams/*.puml)
 PNGS := $(PUMLS:.puml=.png)
 
-preambule: $(PREAMBULE_OBJS) $(DEPS)
-	$(CC) $(LDFLAGS) -o preambule $(PREAMBULE_OBJS) $(LDLIBS)
+# ============================================================
+# Cibles principales
+# ============================================================
 
-posix: $(POSIX_OBJS) $(DEPS)
-	$(CC) $(LDFLAGS) -o multitaskingAccumulatorPosix $(POSIX_OBJS) $(LDLIBS)
+.PHONY: preambule posix atomic testandset
+.PHONY: clean runpreambule runposix runatomic runtestandset pumls
 
-atomic: $(ATOMIC_OBJS) $(DEPS)
-	$(CC) $(LDFLAGS) -o multitaskingAccumulatorAtomic $(ATOMIC_OBJS) $(LDLIBS)
+preambule: $(BIN_DIR)/preambule
 
-testandset: $(TESTANDSET_OBJS) $(DEPS)
-	$(CC) $(LDFLAGS) -o multitaskingAccumulatorTestAndSet $(TESTANDSET_OBJS) $(LDLIBS)
+posix: $(BIN_DIR)/multitaskingAccumulatorPosix
+
+atomic: $(BIN_DIR)/multitaskingAccumulatorAtomic
+
+testandset: $(BIN_DIR)/multitaskingAccumulatorTestAndSet
+
+# ============================================================
+# Compilation des fichiers objets
+# ============================================================
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(H) | $(OBJ_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+# ============================================================
+# Édition des liens
+# ============================================================
+
+$(BIN_DIR)/preambule: $(PREAMBULE_OBJS) | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $(PREAMBULE_OBJS) $(LDLIBS)
+
+$(BIN_DIR)/multitaskingAccumulatorPosix: $(POSIX_OBJS) | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $(POSIX_OBJS) $(LDLIBS)
+
+$(BIN_DIR)/multitaskingAccumulatorAtomic: $(ATOMIC_OBJS) | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $(ATOMIC_OBJS) $(LDLIBS)
+
+$(BIN_DIR)/multitaskingAccumulatorTestAndSet: $(TESTANDSET_OBJS) | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $(TESTANDSET_OBJS) $(LDLIBS)
+
+# ============================================================
+# Nettoyage
+# ============================================================
 
 clean:
-	rm -f preambule multitaskingAccumulatorPosix multitaskingAccumulatorAtomic multitaskingAccumulatorTestAndSet $(PREAMBULE_OBJS) $(POSIX_OBJS) $(ATOMIC_OBJS) $(TESTANDSET_OBJS)
-	rm -f diagrams/*.png
+	rm -rf $(BUILD_DIR)
+
+# ============================================================
+# Exécution
+# ============================================================
 
 runpreambule: clean preambule
-	./preambule
+	./$(BIN_DIR)/preambule
 
 runposix: clean posix
-	./multitaskingAccumulatorPosix
+	./$(BIN_DIR)/multitaskingAccumulatorPosix
 
 runatomic: clean atomic
-	./multitaskingAccumulatorAtomic
+	./$(BIN_DIR)/multitaskingAccumulatorAtomic
 
 runtestandset: clean testandset
-	./multitaskingAccumulatorTestAndSet
+	./$(BIN_DIR)/multitaskingAccumulatorTestAndSet
+
+# ============================================================
+# Génération des diagrammes PlantUML
+# ============================================================
 
 pumls: $(PNGS)
 
 diagrams/%.png: diagrams/%.puml
-	docker run --rm -i ghcr.io/plantuml/plantuml -pipe < $< > $@
+	@tmp=$$(mktemp "$@.tmp.XXXXXX") || exit 1; \
+	trap 'rm -f "$$tmp"' 0; \
+	docker run --rm -i ghcr.io/plantuml/plantuml -pipe < $< > "$$tmp" && mv -f "$$tmp" $@
