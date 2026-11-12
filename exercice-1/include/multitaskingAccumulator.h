@@ -10,10 +10,14 @@
 #define PRODUCER_COUNT      4
 //The number of second the producer shall sleep
 #define PRODUCER_SLEEP_TIME 1
-//The number producer iterations
+//The number producer iterations (overridable for stress builds)
+#ifndef PRODUCER_LOOP_LIMIT
 #define PRODUCER_LOOP_LIMIT 2
-//The number of second the display shall sleep
+#endif
+//The diagnostic period in seconds (overridable for test builds)
+#ifndef DISPLAY_SLEEP_TIME
 #define DISPLAY_SLEEP_TIME  3
+#endif
 //The number display iterations
 #define DISPLAY_LOOP_LIMIT  2
 //The number of second the adder shall sleep
