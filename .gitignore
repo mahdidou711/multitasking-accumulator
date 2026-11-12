@@ -22,6 +22,9 @@ mySoftwareTestAndSet
 build/
 exercice-1/diagrams/*.png
 
+# Banc de vérification local (non publié)
+/exercice-1/tests/
+
 # Documents conservés localement
 /Cours/
 /rapport/
