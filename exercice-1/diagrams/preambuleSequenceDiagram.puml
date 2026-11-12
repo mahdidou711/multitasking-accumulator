@@ -1,67 +1,84 @@
-
 @startuml
-!pragma teoz true
-
-box "bash process"
-participant bash
-
-box "preambule process (child process)" #lightblue
-participant "main" as main
-participant "thread_1:pthread_t" as thread1
-participant "mutex:pthread_mutex_t [1]" as mutex
-participant "semaphore:sem_t [0]" as semaphore
+box "Processus shell" #F3F3F3
+participant "bash" as shell
 end box
+box "Processus programme : preambule (fils)" #EAF3FF
+participant "thread principal : main" as main
+participant "thread_1 : produce" as worker
+participant "mutex : pthread_mutex_t" as mutex
+participant "semaphore non nomme : sem_t" as sem
 end box
 
-activate bash
-bash -> main --++ : "./preambule"
-
-main -> semaphore : sem_unlink
-activate semaphore #gold
-return
-
-main -> semaphore : sem_open
-activate semaphore #gold
-return
-
-note over semaphore : 0
-note over mutex : 1
-
-main -> thread1 : pthread_create
-activate thread1 #FFBBBB
-thread1 --> main
-note over thread1 : produce
-
-main -> thread1 : pthread_join
-deactivate main
-
-thread1 -> mutex : pthread_mutex_lock
-activate mutex #plum
-return
-note over mutex : 0
-
-thread1 -> mutex : pthread_mutex_unlock
-activate mutex #plum
-return
-note over mutex : 1
-
-thread1 -> semaphore : sem_post
-activate semaphore #gold
-return
-note over semaphore : 1
-
-thread1 -> semaphore : sem_wait
-activate semaphore #gold
-return
-note over semaphore : 0
-
-thread1 -> thread1 : pthread_exit
-thread1 --> main --++
-
-main -> semaphore : sem_destroy
-activate semaphore #gold
-return
-
-main -> bash --++ : return ERROR_SUCCESS
-
+shell -> main : lancer ./preambule
+main -> sem : sem_init(&semaphore, 0, 0)
+alt echec de sem_init
+  sem --> main : erreur
+  main -> main : retourner erreur
+else initialisation reussie
+  sem --> main : succes
+  main -> main : pthread_create(&thread_1, ..., produce, ...)
+  alt echec de creation
+    main -> main : status = erreur
+  else creation reussie
+    alt jointure reussie
+      par Thread principal
+        main -> main : appeler pthread_join(thread_1, NULL)
+      else Thread cree : produce
+        worker -> mutex : pthread_mutex_lock
+        alt echec lock
+          worker -> worker : thread_error = 1; return
+        else lock reussi
+          worker -> mutex : pthread_mutex_unlock
+          alt echec unlock
+            worker -> worker : thread_error = 1; return
+          else unlock reussi
+            worker -> sem : sem_post
+            alt echec sem_post
+              worker -> worker : thread_error = 1; return
+            else post reussi
+              loop premier appel puis repetition si EINTR
+                worker -> sem : sem_wait
+                alt succes
+                  sem --> worker : succes ; sortir de la boucle
+                else echec avec EINTR
+                  sem --> worker : EINTR ; recommencer
+                else autre echec
+                  sem --> worker : erreur
+                  worker -> worker : thread_error = 1; return
+                end
+              end
+              worker -> worker : return
+            end
+          end
+        end
+      end
+      main -> main : retour de pthread_join : succes
+      note right of main
+        Retour apres la fin de thread_1 ;
+        bloque si le thread est encore actif.
+      end note
+      main -> main : propager thread_error dans status
+    else echec de jointure
+      main -> main : pthread_join(thread_1, NULL) : erreur
+      note right of main
+        produce peut etre encore en cours : son deroulement
+        concurrent n'est pas detaille dans ce scenario.
+        Retour sans sem_destroy ; la fin du processus
+        interrompt ses threads.
+      end note
+      main -> main : retourner erreur
+    end
+  end
+  opt creation echouee ou jointure reussie
+    main -> sem : sem_destroy(&semaphore)
+    alt echec de sem_destroy
+      sem --> main : erreur
+      main -> main : status = erreur
+    else destruction reussie
+      sem --> main : succes
+    end
+    main -> main : retourner status
+  end
+end
+main --> shell : fin du processus / code de retour
 @enduml
