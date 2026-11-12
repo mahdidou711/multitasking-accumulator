@@ -32,3 +32,17 @@ make pumls
 
 The Makefile uses the `ghcr.io/plantuml/plantuml` image. Generated PNGs and
 build files are not tracked by Git.
+
+Q6 splits the class and sequence diagrams into named views for the report.
+Render all six views with the dedicated command, which preserves the preamble
+and Q1 images:
+
+`sh exercice-1/diagrams/renderQ6.sh`
+
+The script uses, in order: a `plantuml` command on the `PATH`; or the PlantUML
+jar named by `PLANTUML_JAR` (requires `java`); or Docker as a fallback. Example:
+`PLANTUML_JAR=/path/to/plantuml.jar sh exercice-1/diagrams/renderQ6.sh`.
+
+Use this command for Q6 instead of `make pumls`: the generic pipe recipe does
+not produce all the named views. Q6 documents the intended architecture; the C
+sources and headers remain the exercise skeleton.

@@ -1,66 +1,153 @@
 @startuml
-
-dataclass MSG_BLOCK
-
-class MultitaskingAccumulator
-MultitaskingAccumulator : + main()
-
-interface ISensor
-ISensor : + getInput(int i): MSG_BLOCK
-
+title Q6 - Classes (1/2) : modules, donnees et responsabilites
+top to bottom direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam nodesep 20
+hide empty members
+class MultitaskingAccumulator {
+  + main(): int
+}
 interface IAcquisitionManager
-IAcquisitionManager : + getProducedCount(): Integer
-IAcquisitionManager : + getMessage():MSG_BLOCK
-
-class AcquisitionManager
-AcquisitionManager : - producers[4]: pthread_t
-AcquisitionManager : - m1: pthread_mutex_t
-AcquisitionManager : - producedCount: Integer
-AcquisitionManager : - produce()
-AcquisitionManager : + acquisitionManagerInit()
-AcquisitionManager : + acquisitionManagerJoin()
-
+class AcquisitionManager {
+  - producers[4]: pthread_t
+  - inputIds[4]: unsigned int
+  - buffer[4]: MSG_BLOCK
+  - states[4]: SlotState
+  - freeIndices, readyIndices: indices[4]
+  - A, D, createdThreads: unsigned int
+  - closed, aborted: bool
+  - mAcq: pthread_mutex_t
+  - cvFree, cvReady: pthread_cond_t
+  - produce(inputId): void*
+  - reserveSlot(): index/status
+  - publishSlot(index): void
+  - incrementProducerCount(): void
+  + acquisitionManagerInit(): InitStatus
+  + acquisitionManagerJoin(): void
+  + acquisitionManagerClose(): void
+  + acquisitionManagerAbort(): void
+  + acquisitionManagerDestroy(): void
+}
 interface IMessageAdder
-IMessageAdder : + getCurrentSum(): MSG_BLOCK
-IMessageAdder : + getConsumedCount(): Integer
-
-class MessageAdder
-MessageAdder : - consumer: pthread_t
-MessageAdder : - currentSum: MSG_BLOCK
-MessageAdder : - consumedCount: Integer
-MessageAdder : - sum()
-MessageAdder : + messageAdderInit()
-MessageAdder : + messageAdderJoin()
-
-class Msg
-Msg : + messageAdd()
-Msg : + messageCheck()
-
+class MessageAdder {
+  - consumer: pthread_t
+  - workingSum: MSG_BLOCK [prive]
+  - currentSum: MSG_BLOCK [partage]
+  - S, R: unsigned int
+  - full, closed, aborted: bool
+  - diagnosticEnCours: bool
+  - mAdder: pthread_mutex_t
+  - cvDisplay, cvCommit: pthread_cond_t
+  - sum(): void*
+  - publishSum(sum): CommitStatus
+  - commitRejection(): CommitStatus
+  - closePublications(): void
+  + messageAdderInit(): InitStatus
+  + messageAdderJoin(): void
+  + messageAdderAbort(): void
+  + messageAdderDestroy(): void
+}
+class DisplayManager {
+  - displayThread: pthread_t
+  - L: unsigned int [prive]
+  - hasDisplayed: bool [prive]
+  - nextDeadline: timespec [prive]
+  - display(): void*
+  - emitPublication(pub): void
+  - emitDiagnostic(final): CaptureStatus
+  + displayManagerInit(): InitStatus
+  + displayManagerJoin(): void
+  + displayManagerDestroy(): void
+}
+interface ISensor
 interface IDisplay
-IDisplay : + messageDisplay(MSG_BLOCK mBlock)
-IDisplay : + print(Integer producedCount, Integer consumedCount)
+class Msg
+MultitaskingAccumulator *-- AcquisitionManager
+MultitaskingAccumulator *-- MessageAdder
+MultitaskingAccumulator *-- DisplayManager
+AcquisitionManager ..|> IAcquisitionManager
+MessageAdder ..|> IMessageAdder
+MessageAdder ..> IAcquisitionManager : recoit
+DisplayManager ..> IAcquisitionManager : lit A
+DisplayManager ..> IMessageAdder : recoit / capture
+AcquisitionManager ..> ISensor : utilise
+MessageAdder ..> Msg : utilise
+DisplayManager ..> IDisplay : utilise
+legend bottom
+  Architecture cible; les sources C et les en-tetes restent au stade squelette (Q4).
+  Initialement A=D=S=R=L=0, cumul nul; 4 cases libres, publication vide.
+  closed=aborted=diagnosticEnCours=hasDisplayed=false.
+  Mutex libres, conditions initialisees; aucun semaphore; cvDisplay MONOTONIC.
+  Les interfaces et types de retour sont detailles dans le volet classes 2/2.
+endlegend
+@enduml
 
-class DisplayManager
-DisplayManager : - display: pthread_t
-DisplayManager : - display()
-DisplayManager : + displayManagerInit()
-DisplayManager : + displayManagerJoin()
-
-AcquisitionManager .d.> ISensor : use
-AcquisitionManager .r.|> IAcquisitionManager : implement
-
-MessageAdder .r.|> IMessageAdder : implement
-MessageAdder *-d- Msg 
-
-DisplayManager .d.|> IDisplay : implement
-
-MessageAdder ..> IAcquisitionManager : use
-DisplayManager ..> IMessageAdder : use
-DisplayManager ..> IAcquisitionManager : use
-
-
-MultitaskingAccumulator *-r- AcquisitionManager : 1
-MultitaskingAccumulator *-r- MessageAdder : 1
-MultitaskingAccumulator *-d- DisplayManager : 1
-
+@startuml multitaskingAccumulatorClassInterfaces
+title Q6 - Classes (2/2) : interfaces et types de conception
+skinparam monochrome true
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam defaultFontSize 15
+hide empty members
+interface IAcquisitionManager {
+  + getMessage(out): InputStatus
+  + getProducedCount(): unsigned int
+  + getProducerCount(): unsigned int
+}
+interface IMessageAdder {
+  + nextDisplayEvent(deadline, out): DisplayEvent
+  + beginDiagnostic(out): CaptureStatus
+  + endDiagnostic(): void
+  + getCurrentSum(): MSG_BLOCK
+  + getConsumedCount(): unsigned int
+}
+interface ISensor {
+  + getInput(input, block): void
+}
+interface IDisplay {
+  + messageDisplay(block): void
+  + print(produced, consumed: unsigned int): void
+}
+class Msg <<fourni>> {
+  + messageCheck(block): unsigned int
+  + messageAdd(src, add): void
+}
+class MSG_BLOCK <<fourni>> {
+  checksum: unsigned int
+  mData[256]: unsigned int
+}
+class Publication <<copie privee>> {
+  sum: MSG_BLOCK
+  version: unsigned int
+}
+class DiagnosticCapture <<copie privee>> {
+  S, R: unsigned int
+  hasPending: bool
+  pending: Publication
+}
+IAcquisitionManager -[hidden]right-> IMessageAdder
+IAcquisitionManager -[hidden]down-> ISensor
+ISensor -[hidden]down-> Msg
+IMessageAdder -[hidden]down-> IDisplay
+IMessageAdder ..> DiagnosticCapture
+IMessageAdder ..> Publication
+DiagnosticCapture ..> Publication
+Publication ..> MSG_BLOCK
+legend bottom
+  AM fournit IAcquisitionManager; MA fournit IMessageAdder; DM utilise les deux.
+  block/src/add: volatile MSG_BLOCK*; input/produced/consumed: unsigned int.
+  ISensor et IDisplay sont fournis par les bibliotheques externes, utilisees par AM/DM.
+  getMessage(out: MSG_BLOCK*); nextDisplayEvent(deadline: timespec, out: Publication*).
+  beginDiagnostic(out: DiagnosticCapture*); copie et retrait atomiques sous mAdder.
+  begin/end verrouillent et deverrouillent en interne: aucun mutex detenu entre eux.
+  InputStatus={MESSAGE,END,ABORT}; DisplayEvent={PUBLICATION,DIAGNOSTIC_DUE,END,ABORT}.
+  InitStatus={OK,ERROR}; CaptureStatus/CommitStatus={OK,ABORT}.
+  SlotState={LIBRE,RESERVEE,PRETE,EN_LECTURE}; alias getProducerCount=getProducedCount.
+  getCurrentSum = cumul courant; getConsumedCount = T=S+R (messages traites), sous mAdder.
+  Getters isoles synchronises, non composes pour fabriquer le diagnostic (S,R de la capture; A lu une fois).
+endlegend
 @enduml

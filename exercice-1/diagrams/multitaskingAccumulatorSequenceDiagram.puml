@@ -1,0 +1,179 @@
+' Sequence Q6 en quatre volets; rendu: sh exercice-1/diagrams/renderQ6.sh
+' Les appels POSIX dans les notes sont internes aux modules proprietaires.
+@startuml multitaskingAccumulatorSequenceAcquisition
+title Q6 - Sequence (1/4) : acquisition et propriete des cases
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontSize 16
+skinparam maxMessageSize 240
+hide footbox
+participant "producteur 0\np[0]" as P0
+participant "producteur 1\np[1]" as P1
+participant "AcquisitionManager\netat et accesseurs" as AM
+participant "SensorManager\nISensor" as Sensor
+participant "MessageAdder\nconsommateur" as MA
+note over P0,P1 : Deux des quatre producteurs independants.\nAucun evenement de disponibilite dans ISensor.
+par reservations sous mAcq, sections breves
+  P0 -> AM : reserveSlot()
+  AM --> P0 : case k RESERVEE exclusivement
+else
+  P1 -> AM : reserveSlot()
+  AM --> P1 : case j distincte de k
+end
+note over AM : while aucune case libre et !aborted: attendre cvFree.\nL'attente relache mAcq; unlock avant retour.
+par remplissages en parallele hors mAcq
+  P0 -> Sensor : getInput(0, &buffer[k])
+  Sensor --> P0 : bloc acquis
+else
+  P1 -> Sensor : getInput(1, &buffer[j])
+  Sensor --> P1 : bloc acquis
+end
+note over P0 : Suspension possible avant publication de k.
+P1 -> AM : publishSlot(j)
+note right of AM : Sous mAcq: incrementProducerCount() donne A++;\nj PRETE, enfiler j; signal cvReady; unlock.
+AM --> P1 : acquisition enregistree
+MA -> AM : getMessage(&block)
+note over AM : Sous mAcq: while ready vide et !closed et !aborted:\nattendre cvReady. Retirer j, D++, EN_LECTURE; unlock.\nCopier le bloc en prive hors verrou.\nSous mAcq: j LIBRE; signal cvFree; unlock.
+AM --> MA : MESSAGE, copie privee du bloc j
+note over AM,MA : La case prete j progresse sans attendre la reservation k.
+P0 -> AM : publishSlot(k)
+AM --> P0 : acquisition enregistree, k PRETE
+note over P0,MA : LIBRE -> RESERVEE -> PRETE -> EN_LECTURE -> LIBRE.\nEn abandon: rendre toute reservation possedee et sortir.
+@enduml
+
+@startuml multitaskingAccumulatorSequenceProcessing
+title Q6 - Sequence (2/4) : traitement et sortie en parallele
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontSize 16
+skinparam maxMessageSize 240
+hide footbox
+participant "AcquisitionManager" as AM
+participant "MessageAdder" as MA
+participant "Msg" as Msg
+participant "DisplayManager" as DM
+participant "IDisplay" as Output
+par boucle consommateur (END/ABORT => sortie)
+  MA -> AM : getMessage(&block)
+  AM --> MA : MESSAGE, case liberee
+  MA -> Msg : messageCheck(&block)
+  Msg --> MA : validite; log si corruption
+  alt invalide
+    MA -> MA : commitRejection()
+    note right of MA : Attendre !diagnosticEnCours;\npuis R++ sous mAdder.
+  else valide
+    MA -> Msg : messageAdd(&workingSum, &block)
+    MA -> MA : publishSum(workingSum)
+    note right of MA : Attendre !full et !diagnosticEnCours;\npublier cumul et S++ sous mAdder;\nfull=true; signal cvDisplay.
+  end
+else boucle afficheur (concurrente)
+  DM -> MA : nextDisplayEvent(deadline, &pub)
+  note over MA,DM : ABORT; ferme et vide => END; sinon echeance due prioritaire.\nSinon retirer si full; sinon attente monotone sur cvDisplay.\nRetrait: copie {cumul,S}, full=false; signal cvCommit.
+  alt PUBLICATION
+    MA --> DM : copie privee {sum,version}
+    DM -> DM : emitPublication(pub)
+    DM -> Output : messageDisplay(&pub.sum)
+    Output --> DM : retour
+    note right of DM : L=version apres retour;\nreexaminer l'echeance.
+  else DIAGNOSTIC_DUE ou END
+    MA --> DM : evenement sans retrait
+    DM -> DM : emitDiagnostic(final)
+    ref over MA,DM : Volet 3; END => bilan puis fin
+  end
+end
+note over MA,Output : Attentes en while sous mutex; ABORT interdit tout nouvel engagement.\nChaque version, meme de valeur inchangee, est retiree et emise une seule fois.
+@enduml
+
+@startuml multitaskingAccumulatorSequenceDiagnostic
+title Q6 - Sequence (3/4) : diagnostic prioritaire et coherent
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontSize 16
+skinparam maxMessageSize 240
+hide footbox
+participant "consommateur" as Consumer
+participant "MessageAdder" as MA
+participant "DisplayManager" as DM
+participant "AcquisitionManager" as AM
+participant "IDisplay" as Output
+DM -> MA : beginDiagnostic(&capture)
+note over MA : Sous mAdder: diagnosticEnCours=true; copier S,R;\nretirer l'eventuelle publication; unlock avant retour.
+MA --> DM : capture (pub=capture.pending)
+opt un appel de commit arrive pendant le gel
+  Consumer -> MA : publishSum(...) ou commitRejection()
+  note over Consumer,MA : Appel bloque sur cvCommit; mutex relache.
+end
+alt hasPending
+  DM -> DM : emitPublication(pub)
+  DM -> Output : messageDisplay(&pub.sum)
+  Output --> DM : retour; L=S
+else !hasDisplayed et S=0
+  DM -> Output : messageDisplay(&zeroInitial)
+  Output --> DM : retour; L=0
+else deja aligne
+  note right of DM : L=S; aucune reemission.
+end
+DM -> AM : getProducedCount()
+AM --> DM : A, une lecture sous mAcq
+note over DM,AM : S,R figes: triplet coherent a cet instant.\nLes acquisitions continuent, sans verrou imbrique.
+DM -> MA : endDiagnostic()
+note over MA : Sous mAdder: diagnosticEnCours=false;\nbroadcast cvCommit; unlock.
+MA --> DM : retour
+opt un appel de commit attendait le reveil
+  MA --> Consumer : engagement et retour apres endDiagnostic
+  note over Consumer,MA : Une nouvelle version ou R++ peut preceder print;\nla copie privee du diagnostic reste inchangee.
+end
+DM -> Output : print(A, S+R)
+Output --> DM : retour; B=A-S-R
+note right of DM : T=S+R: messages traites (rejets inclus).\nComplement stdout obligatoire A,S,R,B;\nB: restant a traiter; meme instantane.\nS=L: version du cumul affiche.
+note over DM,Output : Apres l'eventuel cumul capture, aucun autre\nmessageDisplay avant print; publication suivante conservee.
+DM -> DM : prochain tick strictement apres la fin
+note over MA,DM : Capture finie apres au plus un cumul et une lecture de A.
+@enduml
+
+@startuml multitaskingAccumulatorSequenceLifecycle
+title Q6 - Sequence (4/4) : fermeture et demarrage partiel
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontSize 16
+skinparam maxMessageSize 260
+hide footbox
+participant main as Main
+participant AcquisitionManager as AM
+participant MessageAdder as MA
+participant DisplayManager as DM
+group initialisations verifiees (statut apres chaque appel)
+  Main -> AM : acquisitionManagerInit()
+  Main -> MA : messageAdderInit() [si OK]
+  Main -> DM : displayManagerInit() [si OK]
+end
+alt toutes les initialisations reussies
+  Main -> AM : acquisitionManagerJoin()
+  AM --> Main : producteurs termines
+  Main -> AM : acquisitionManagerClose()
+  note over AM : closed=true; broadcast cvReady.
+  par vidage des entrees
+    MA -> AM : getMessage(&block)
+    AM --> MA : MESSAGE jusqu'a END (ferme et vide)
+    MA -> MA : closePublications()
+    note over MA : closed=true; broadcast cvDisplay.
+  else sortie continue
+    ref over MA,DM : Volets 2/3: sorties concurrentes au vidage
+  end
+  Main -> MA : messageAdderJoin()
+  Main -> DM : displayManagerJoin()
+  note over DM : Vider la publication restante;\nbilan emitDiagnostic(true),\ntermine avant retour de join.
+else echec de demarrage, y compris horloge
+  Main -> AM : acquisitionManagerAbort()
+  Main -> MA : messageAdderAbort()
+  note over AM,MA : Objets initialises seuls: aborted=true, reveiller toutes\nles attentes; lever le gel, rendre les reservations.
+  Main -> AM : acquisitionManagerJoin()
+  Main -> MA : messageAdderJoin()
+  Main -> DM : displayManagerJoin()
+  note over Main,DM : Joindre seulement les threads crees; aucun bilan normal.
+end
+Main -> DM : displayManagerDestroy()
+Main -> MA : messageAdderDestroy()
+Main -> AM : acquisitionManagerDestroy()
+note over Main,DM : Detruire les seuls objets initialises apres toutes les jointures.
+@enduml
