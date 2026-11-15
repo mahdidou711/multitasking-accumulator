@@ -15,7 +15,7 @@ This repository is derived from [`fthomasfr/multitasking_training_practical_work
 **Author's contributions (Mehdi Bouama):**
 
 - design and implementation of exercise 1 in `acquisitionManagerPOSIX.c`, `messageAdder.c` and `displayManager.c`, with the related changes to `multitaskingAccumulator.c`, `preambule.c` and the interface headers;
-- the requirements-allocation diagram and the UML class and sequence diagrams (`exercice-1/diagrams/`);
+- the requirements-allocation diagram and the UML class and sequence diagrams (`exercice-1/diagrams/`), including the two preamble sequence diagrams (provided program and corrected version);
 - the reorganization into `src/`, `include/`, `docs/`, the Makefile changes and `renderQ6.sh`.
 
 ## Features
@@ -88,14 +88,14 @@ exercice-1/
 
 ## Known limitations
 
-- **Requirement E5.** `IDisplay.print` takes only (produced, consumed, left). The diagnostic sends `print(A, S+R)` and adds a complement line `A, S, R, B` outside `IDisplay`. Literal conformance to E5 through `print` alone is impossible once rejections occur (R > 0); this design interpretation remains open.
+- **Requirement E5.** `IDisplay.print` takes only (produced, consumed, left). The diagnostic sends `print(A, S+R)` and adds a complement line `A, S, R, B` outside `IDisplay`. With the provided `sensorManager.c` every checksum is valid (R = 0), so `print(A, S+R)` equals `print(A, S)` and E5 is met literally through `print`. Literal conformance is impossible only once rejections occur (R > 0, for example with injected faults); this design interpretation remains open.
 - x86-64 only (`-mcx16`); `CLOCK_MONOTONIC` condition variables are required.
 - The atomic and test-and-set variants are not implemented.
 - The test bench is not published.
 
 ## Technologies
 
-C11, POSIX threads and semaphores, GNU Make, PlantUML, draw.io.
+C11, POSIX threads, mutexes and condition variables, GNU Make, PlantUML, draw.io. POSIX semaphores appear only in the preamble example.
 
 ## License and attribution
 

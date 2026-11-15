@@ -12,7 +12,7 @@
 #include "iAcquisitionManager.h"
 #include "debug.h"
 
-//Capacity of the common buffer (Q6: 4 blocks; overridable for tests V4a/V6)
+//Capacity of the common buffer (design: 4 blocks; overridable for tests)
 #ifndef ACQUISITION_BUFFER_SIZE
 #define ACQUISITION_BUFFER_SIZE 4
 #endif
