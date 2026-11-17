@@ -8,9 +8,10 @@
 unsigned int messageAdderInit(void);
 
 /**
+* @return ERROR_SUCCESS, or ERROR_TERMINATION (unjoined state retained)
 * Waits that message adder terminates
 */
-void messageAdderJoin(void);
+unsigned int messageAdderJoin(void);
 
 /**
 * Aborts the message adder: wakes every waiting task, no new commitment

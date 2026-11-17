@@ -8,9 +8,10 @@
 unsigned int acquisitionManagerInit(void);
 
 /**
+* @return ERROR_SUCCESS, or ERROR_TERMINATION (unjoined state retained)
 * Waits that acquisitions terminate (joins only the created producers)
 */
-void acquisitionManagerJoin(void);
+unsigned int acquisitionManagerJoin(void);
 
 /**
 * Closes the acquisition: no more blocks; ready blocks remain readable

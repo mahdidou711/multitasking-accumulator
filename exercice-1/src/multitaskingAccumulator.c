@@ -24,33 +24,47 @@ int main( void )
 	else if (displayManagerInit() != ERROR_SUCCESS)
 		status = ERROR_INIT;
 
-	if (status == ERROR_SUCCESS)
-	{
-		printf("[multitaskingAccumulator]Task initialization done.\n");
-		printf("[multitaskingAccumulator]Scheduling in progress...\n");
-		//Normal closing: producers first, then drain the buffer and the publications
-		acquisitionManagerJoin();
-		acquisitionManagerClose();
-		messageAdderJoin();
-		displayManagerJoin();
-	}
-	else
+	if (status != ERROR_SUCCESS)
 	{
 		printf("[multitaskingAccumulator]Initialization failed, aborting the created tasks\n");
 		acquisitionManagerAbort();
 		messageAdderAbort();
-		acquisitionManagerJoin();
-		messageAdderJoin();
-		displayManagerJoin();
+	}
+	else
+	{
+		printf("[multitaskingAccumulator]Task initialization done.\n");
+		printf("[multitaskingAccumulator]Scheduling in progress...\n");
 	}
 
-	//Destroy only after every join
-	displayManagerDestroy();
-	messageAdderDestroy();
-	acquisitionManagerDestroy();
+	if (acquisitionManagerJoin() != ERROR_SUCCESS)
+	{
+		status = ERROR_TERMINATION;
+		acquisitionManagerAbort();
+		messageAdderAbort();
+	}
+	else if (status == ERROR_SUCCESS)
+		acquisitionManagerClose();
 
-	printf("[multitaskingAccumulator]Threads terminated\n");
+	if (messageAdderJoin() != ERROR_SUCCESS)
+	{
+		status = ERROR_TERMINATION;
+		acquisitionManagerAbort();
+		messageAdderAbort();
+	}
+	if (displayManagerJoin() != ERROR_SUCCESS)
+		status = ERROR_TERMINATION;
 
-	exit(status == ERROR_SUCCESS ? EXIT_SUCCESS : ERROR_INIT);
+	//A non-joined thread may still access any module's shared objects.
+	if (status != ERROR_TERMINATION)
+	{
+		displayManagerDestroy();
+		messageAdderDestroy();
+		acquisitionManagerDestroy();
+		printf("[multitaskingAccumulator]Threads terminated\n");
+	}
+	else
+		fprintf(stderr, "[multitaskingAccumulator]Termination failed; shared objects retained\n");
+
+	exit(status);
 
 }

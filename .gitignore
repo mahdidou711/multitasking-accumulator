@@ -48,3 +48,9 @@ exercice-1/diagrams/*.png
 *.key
 *.p12
 *.pfx
+
+# Documents de validation et configuration conservés localement
+/exercice-1/docs/validation-partie2/
+/exercice-1/docs/tp.pdf
+.claude/
+/revision/

@@ -55,16 +55,24 @@ unsigned int displayManagerInit(void){
 	return ERROR_SUCCESS;
 }
 
-void displayManagerJoin(void){
+unsigned int displayManagerJoin(void){
 	if (displayCreated)
 	{
-		pthread_join(displayThread, NULL);
+		int rc = pthread_join(displayThread, NULL);
+		if (rc != 0)
+		{
+			fprintf(stderr, "[displayManager]pthread_join failed: %s\n", strerror(rc));
+			return ERROR_TERMINATION;
+		}
 		displayCreated = false;
 		printf("[displayManager]Display joined\n");
 	}
+	return ERROR_SUCCESS;
 }
 
 void displayManagerDestroy(void){
+	if (displayCreated)
+		return;
 	//No synchronization object is owned by this module
 	lastVersion = 0;
 	hasDisplayed = false;

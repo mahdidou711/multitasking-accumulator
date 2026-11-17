@@ -37,6 +37,7 @@ static void *produce(void *params);
 static unsigned int inputIds[PRODUCER_COUNT];
 //Number of producers effectively created (only these are joined)
 static unsigned int createdThreads = 0;
+static bool producerJoined[PRODUCER_COUNT];
 
 /**
 * Common buffer and its metadata, all protected by mAcq.
@@ -216,6 +217,7 @@ unsigned int acquisitionManagerInit(void)
 	produceCount = 0;
 	removedCount = 0;
 	createdThreads = 0;
+	memset(producerJoined, 0, sizeof producerJoined);
 	closed = false;
 	aborted = false;
 	readyHead = 0;
@@ -247,15 +249,25 @@ unsigned int acquisitionManagerInit(void)
 	return ERROR_SUCCESS;
 }
 
-void acquisitionManagerJoin(void)
+unsigned int acquisitionManagerJoin(void)
 {
-	unsigned int i;
-	for (i = 0; i < createdThreads; i++)
+	unsigned int status = ERROR_SUCCESS;
+	for (unsigned int i = 0; i < createdThreads; i++)
 	{
-		pthread_join(producers[i], NULL);
+		if (producerJoined[i])
+			continue;
+		int rc = pthread_join(producers[i], NULL);
+		if (rc != 0)
+		{
+			fprintf(stderr, "[acquisitionManager]pthread_join failed for producer %u: %s\n", i, strerror(rc));
+			status = ERROR_TERMINATION;
+		}
+		else
+			producerJoined[i] = true;
 	}
-	createdThreads = 0;
-	printf("[acquisitionManager]Producers joined\n");
+	if (status == ERROR_SUCCESS)
+		printf("[acquisitionManager]Producers joined\n");
+	return status;
 }
 
 void acquisitionManagerClose(void)
@@ -279,6 +291,9 @@ void acquisitionManagerAbort(void)
 
 void acquisitionManagerDestroy(void)
 {
+	for (unsigned int i = 0; i < createdThreads; i++)
+		if (!producerJoined[i])
+			return;
 	if (cvReadyInitialized)
 		pthread_cond_destroy(&cvReady);
 	if (cvFreeInitialized)

@@ -8,9 +8,10 @@
 unsigned int displayManagerInit(void);
 
 /**
+* @return ERROR_SUCCESS, or ERROR_TERMINATION (unjoined state retained)
 * Waits that display manager terminates
 */
-void displayManagerJoin(void);
+unsigned int displayManagerJoin(void);
 
 /**
 * Releases the display manager state (no synchronization object owned)

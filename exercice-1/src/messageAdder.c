@@ -111,17 +111,23 @@ static unsigned int createSynchronizationObjects(void)
 	if (rc != 0)
 	{
 		printf("[messageAdder]Unsupported configuration: pthread_condattr_setclock(CLOCK_MONOTONIC) refused: %s\n", strerror(rc));
-		pthread_condattr_destroy(&attr);
+		int destroyRc = pthread_condattr_destroy(&attr);
+		if (destroyRc != 0)
+			fprintf(stderr, "[messageAdder]pthread_condattr_destroy failed: %s\n", strerror(destroyRc));
 		return ERROR_INIT;
 	}
 	rc = pthread_cond_init(&cvDisplay, &attr);
-	pthread_condattr_destroy(&attr);
+	int destroyRc = pthread_condattr_destroy(&attr);
+	if (destroyRc != 0)
+		fprintf(stderr, "[messageAdder]pthread_condattr_destroy failed: %s\n", strerror(destroyRc));
 	if (rc != 0)
 	{
 		printf("[messageAdder]pthread_cond_init(cvDisplay) failed: %s\n", strerror(rc));
 		return ERROR_INIT;
 	}
 	cvDisplayInitialized = true;
+	if (destroyRc != 0)
+		return ERROR_INIT;
 	printf("[messageAdder]Mutex and conditions created (cvDisplay on CLOCK_MONOTONIC)\n");
 	return ERROR_SUCCESS;
 }
@@ -289,13 +295,19 @@ unsigned int messageAdderInit(void){
 	return ERROR_SUCCESS;
 }
 
-void messageAdderJoin(void){
+unsigned int messageAdderJoin(void){
 	if (consumerCreated)
 	{
-		pthread_join(consumer, NULL);
+		int rc = pthread_join(consumer, NULL);
+		if (rc != 0)
+		{
+			fprintf(stderr, "[messageAdder]pthread_join failed: %s\n", strerror(rc));
+			return ERROR_TERMINATION;
+		}
 		consumerCreated = false;
 		printf("[messageAdder]Consumer joined\n");
 	}
+	return ERROR_SUCCESS;
 }
 
 void messageAdderAbort(void){
@@ -310,6 +322,8 @@ void messageAdderAbort(void){
 }
 
 void messageAdderDestroy(void){
+	if (consumerCreated)
+		return;
 	if (cvDisplayInitialized)
 		pthread_cond_destroy(&cvDisplay);
 	if (cvCommitInitialized)
